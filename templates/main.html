@@ -40,7 +40,7 @@
             const [email, setEmai] = React.useState("")
             const [generateLoader, setGenerateLoader] = React.useState(false)
             const generateCSVFile = () => {
-                fetch("/generateCSV").then((response) => response.json()).then((json) => {
+                fetch("/stori/generateCSV").then((response) => response.json()).then((json) => {
                     setcsvStats(json)
                     temp = csvList
                     temp.push(json.Filename)
@@ -49,7 +49,7 @@
             }
             const getCsvList = () => {
                 setGenerateLoader()
-                fetch("getCSVList").then((response) => response.json()).then((json) => {
+                fetch("/stori/getCSVList").then((response) => response.json()).then((json) => {
                     setcsvList(json)
                     setGenerateLoader(false)
 
@@ -58,7 +58,7 @@
 
             const sendEmail = () => {
                 if (validateEmail(email) && currentCSV != null) {
-                    fetch("/fireEmail", {
+                    fetch("/stori/fireEmail", {
                         method: 'POST',
                         body: JSON.stringify({ email: email, filename: currentCSV }),
                         headers: {
@@ -107,7 +107,7 @@
                             <div>
                                 <input className={"uk-input"} placeholder={"Email"} onChange={(event) => setEmai(event.target.value)} type="email" /><br/>
                                 <div>
-                                    <button className="uk-button uk-button-primary uk-margin" onClick={() => window.open("/downloadCSV/" + currentCSV, '_blank')}>Download CSV</button>    
+                                    <button className="uk-button uk-button-primary uk-margin" onClick={() => window.open("/stori/downloadCSV/" + currentCSV, '_blank')}>Download CSV</button>    
                                 </div>
                                 <div >
                                     <button className="uk-button uk-button-primary" onClick={() => sendEmail()}>Send Email</button>

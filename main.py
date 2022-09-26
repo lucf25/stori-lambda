@@ -1,12 +1,15 @@
 from crypt import methods
 import json
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, Response
 import pandas as pd
 import statistics
 import numpy as np
 from random import randint, random, choice
 import string, json, os
 from flask_mail import Mail, Message
+import boto3
+import io
+
 
 from sqlalchemy import create_engine, insert
 app = Flask(__name__)
@@ -18,7 +21,11 @@ def main():
 @app.route("/fireEmail", methods=["POST"])
 def generatemail():
     req = request.get_json()
-    df = pd.read_csv('data/' + req['filename'])
+    s3 = getAWSClient()
+    obj = s3.get_object(Bucket='stori-data', Key=req["filename"])
+
+
+    df = pd.read_csv(io.BytesIO(obj['Body'].read()))
     df[['Month','Day']] = df["Date"].str.split("/", 1, expand=True);
     df = df.astype({'Month':'int'})
 
@@ -38,27 +45,36 @@ def generateRandomData():
     random_list = []
     for x in range(y):
         random_list.append([x, str(randint(1,12))+"/"+""+str(randint(1,28)), round(choice([-1,1])*random() *100, 2)])        
-    engine = create_engine("mysql+mysqldb://admin:"+'cehxuk-paxqec-sowHo3'+"@database-1.ctwyx4gwfp3n.us-east-1.rds.amazonaws.com/stori")
+    #engine = create_engine("mysql+mysqldb://admin:"+'cehxuk-paxqec-sowHo3'+"@database-1.ctwyx4gwfp3n.us-east-1.rds.amazonaws.com/stori")
     ls = pd.DataFrame(random_list, columns=["Id", "Date", "Transaction"])
     filename = get_random_string(30)+".csv"
-    file = open("data/"+filename, "w")
-    file.write(ls.to_csv(index=False))
-    file.close()
-    csv_id = 0
-    with engine.connect() as connection: 
-        id = connection.execute(f"INSERT INTO csv (filename, transactions) VALUES ('{filename}', {y})  ")
-        csv_id = id.lastrowid
-    ls["csv_id"] = csv_id
+    s3 = getAWSClient()
+    object = s3.put_object(Body=ls.to_csv(index=False), Bucket='stori-data', Key=filename)
+
     
-    ls.to_sql("Transactions",con=engine,index=False, if_exists="append" )
+    csv_id = 0
+    #with engine.connect() as connection: 
+    #    id = connection.execute(f"INSERT INTO csv (filename, transactions) VALUES ('{filename}', {y})  ")
+    #    csv_id = id.lastrowid
+    #ls["csv_id"] = csv_id
+    
+    #ls.to_sql("Transactions",con=engine,index=False, if_exists="append" )
 
     response = {"Transactions": y,  "Filename": filename} 
     return json.dumps(response)
 
 @app.route("/getCSVList")
 def getCSVList():
-    csvs = os.listdir("data")
-    return json.dumps(csvs)
+
+    s3 = getAWSClient()
+    csvs = s3.list_objects_v2(
+        Bucket="stori-data",
+    )
+    cr = []
+    for content in csvs.get('Contents', []):
+        cr.append(content["Key"])
+
+    return (cr)
 
 def get_random_string(length):
     letters = string.ascii_lowercase
@@ -68,12 +84,12 @@ def get_random_string(length):
 
 @app.route("/email")
 def sendEmail(html, email):
-    app.config['MAIL_SERVER']='smtp.hostinger.com'
-    app.config['MAIL_PORT'] = 465
-    app.config['MAIL_USERNAME'] = 'dev@dogker.xyz'
-    app.config['MAIL_PASSWORD'] = 'cehxuk-paxqec-sowHo3'
+    app.config['MAIL_SERVER']='smtp-relay.sendinblue.com'
+    app.config['MAIL_PORT'] = 587
+    app.config['MAIL_USERNAME'] = 'luisenriquecfr@me.com'
+    app.config['MAIL_PASSWORD'] = 'OKUFA5MzBpW64Qjv'
     app.config['MAIL_USE_TLS'] = False
-    app.config['MAIL_USE_SSL'] = True
+    app.config['MAIL_USE_SSL'] = False
     mail = Mail(app)
 
     msg = Message('Stori Account Summary', sender = 'dev@dogker.xyz', recipients = [email])
@@ -84,7 +100,22 @@ def sendEmail(html, email):
 
 @app.route("/downloadCSV/<path:filename>")
 def downloadCSV(filename): 
-   return send_file("data/"+filename, mimetype="text/csv", as_attachment=True)
+    s3 = getAWSClient()
+    obj = s3.get_object(Bucket='stori-data', Key=filename)
+    return Response(
+        obj['Body'].read(),
+        mimetype='text/csv',
+        headers={"Content-Disposition": "attachment;filename="+filename}
+    )
     
+
+
+def getAWSClient():
+    client = boto3.client('s3',
+    aws_access_key_id="AKIAQT5FHBS2FKWU2LNG",
+    aws_secret_access_key="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",
+    )
+    return client
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', debug=True, port=80)
